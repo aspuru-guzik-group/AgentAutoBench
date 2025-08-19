@@ -9,9 +9,40 @@ ref_csv  = Path("Your_referenced_value")
 
 # --- 1) Logic report: existence of thermal data in each species folder ---
 def check_enthalpy_exist(txt: str) -> bool:
+    """
+    Checks whether the output reports a total enthalpy value.
+
+    Looks for the exact phrase "Total enthalpy" (case-sensitive) anywhere in the
+    text, as written by ORCA when reporting enthalpy.
+
+    Args:
+        txt (str): Full text of the ORCA output file.
+
+    Returns:
+        bool: True if "Total enthalpy" appears; otherwise False.
+
+    Raises:
+        None.
+    """
     return "Total enthalpy" in txt
 
+
 def check_gibbs_exist(txt: str) -> bool:
+    """
+    Checks whether the output reports a final Gibbs free energy value.
+
+    Looks for the exact phrase "Final Gibbs free energy" (case-sensitive)
+    anywhere in the text, as written by ORCA when reporting Gibbs free energy.
+
+    Args:
+        txt (str): Full text of the ORCA output file.
+
+    Returns:
+        bool: True if "Final Gibbs free energy" appears; otherwise False.
+
+    Raises:
+        None.
+    """
     return "Final Gibbs free energy" in txt
 
 logic_records = []
@@ -53,7 +84,23 @@ ref_key  = next((c for c in ("Reactant","Molecule","RH") if c in df_ref.columns)
                 df_ref.columns[0])
 
 # --- Normalize to a common 'species' column ---
-def normalize(s):
+def normalize(s: str) -> str:
+    """
+    Normalizes a species label to a canonical form.
+
+    Trims surrounding whitespace, lowercases, removes parentheses, and replaces
+    internal spaces with underscores. Useful for standardizing species names
+    across folders, CSV columns, and lookups.
+
+    Args:
+        s (str): Raw species string to normalize.
+
+    Returns:
+        str: Normalized species string (lowercase, no parentheses, spaces → underscores).
+
+    Raises:
+        None.
+    """
     return (
         s.strip()
          .lower()
