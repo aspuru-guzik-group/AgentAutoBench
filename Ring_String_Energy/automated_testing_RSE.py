@@ -10,9 +10,40 @@ ref_csv  = root_dir / "refrenced_data.csv"  # keep as-is per your current layout
 
 # --- 1) Logic report: existence of thermal data in each species folder ---
 def check_enthalpy_exist(txt: str) -> bool:
+    """
+    Checks whether the output reports a total enthalpy value.
+
+    Looks for the exact phrase "Total enthalpy" (case-sensitive) anywhere in the
+    text, as written by ORCA when reporting enthalpy.
+
+    Args:
+        txt (str): Full text of the ORCA output file.
+
+    Returns:
+        bool: True if "Total enthalpy" appears; otherwise False.
+
+    Raises:
+        None.
+    """
     return "Total enthalpy" in txt
 
+
 def check_gibbs_exist(txt: str) -> bool:
+    """
+    Checks whether the output reports a final Gibbs free energy value.
+
+    Looks for the exact phrase "Final Gibbs free energy" (case-sensitive)
+    anywhere in the text, as written by ORCA when reporting Gibbs free energy.
+
+    Args:
+        txt (str): Full text of the ORCA output file.
+
+    Returns:
+        bool: True if "Final Gibbs free energy" appears; otherwise False.
+
+    Raises:
+        None.
+    """
     return "Final Gibbs free energy" in txt
 
 logic_records = []
@@ -39,13 +70,33 @@ df_logic.to_csv(logic_csv, index=False)
 # -------------------------
 
 def _normalize_label(s: str) -> str:
-    """Normalize a header for robust matching, keeping ΔH/ΔG info."""
+    """
+    Normalizes a header string for robust matching while preserving ΔH/ΔG semantics.
+
+    Performs Unicode NFKC normalization, replaces the Greek delta (Δ) with the
+    ASCII token "delta", exposes compact notations like "(deltaH)/(deltaG)" or
+    "(dH)/(dG)" to "delta h"/"delta g", inserts a space between "delta"/"d" and
+    "H"/"G" when adjacent (e.g., "deltaH" → "delta h"), removes unit
+    parentheses such as "(kcal/mol)", "(kJ/mol)", "(hartree)", "(au)", strips
+    remaining parentheses while keeping content, normalizes synonyms
+    ("rx"/"rxn" → "reaction"), replaces underscores/dashes with spaces, collapses
+    repeated whitespace, and lowercases the result.
+
+    Args:
+        s (str): Raw header string to normalize. If None or empty, treated as "".
+
+    Returns:
+        str: Normalized, lowercase header string suitable for key matching.
+
+    Raises:
+        None.
+    """
     s = unicodedata.normalize("NFKC", s or "")
     # unify delta symbol
     s = s.replace("Δ", "delta")
     # expose (deltaH)/(deltaG) -> ' delta h ' / ' delta g '
     s = re.sub(r"\(\s*(delta\s*[hg]|d\s*[hg])\s*\)", r" \1 ", s, flags=re.I)
-    # add space between 'delta' or 'd' and H/G when adjacent (e.g., 'deltaH' -> 'delta h')
+    # add space between 'delta' or 'd' and H/G when adjacent
     s = re.sub(r"\b(delta)\s*([hg])\b", r"\1 \2", s, flags=re.I)
     s = re.sub(r"\b(d)\s*([hg])\b", r"\1 \2", s, flags=re.I)
     # drop unit parentheses like (kcal/mol), (kJ/mol), (hartree), (au)
@@ -58,8 +109,46 @@ def _normalize_label(s: str) -> str:
     s = re.sub(r"\s+", " ", s.strip())
     return s.lower()
 
-def _auto_map_columns(columns):
-    """Return dict canonical_key -> original_column_header detected in CSV."""
+
+def _auto_map_columns(columns: Iterable[str]) -> Dict[str, str]:
+    """
+    Auto-detects canonical CSV columns by matching normalized header text.
+
+    Produces a mapping from canonical keys to the original column names by
+    normalizing each header with `_normalize_label` and applying content rules.
+
+    Canonical keys and detection rules:
+      - 'ring_size': A header containing both 'ring' and 'size' (any order), or
+        a mild fallback of exactly 'n', 'ring n', or 'size n'.
+      - 'strain_dH': A header containing 'strain' AND (delta h | enthalpy).
+      - 'strain_dG': A header containing 'strain' AND (delta g | gibbs | free energy).
+      - 'reaction_dH': A header with (delta h | enthalpy) that does NOT contain 'strain'.
+      - 'reaction_dG': A header with (delta g | gibbs | free energy) that does NOT contain 'strain'.
+
+    Notes:
+      - Delta-H/G detection accepts variants exposed by normalization, e.g.,
+        "delta h", "d h", "enthalpy", and "delta g", "d g", "gibbs",
+        "free energy".
+      - When multiple headers match a rule, the first match encountered in the
+        input iteration order is chosen.
+
+    Args:
+        columns (Iterable[str]): Sequence of original CSV column headers.
+
+    Returns:
+        Dict[str, str]: Mapping of canonical key → original column header:
+            {
+              "ring_size": <header>,
+              "reaction_dH": <header>,
+              "reaction_dG": <header>,
+              "strain_dH": <header>,
+              "strain_dG": <header>,
+            }
+
+    Raises:
+        KeyError: If any required canonical key cannot be mapped from the
+            provided headers. The error message includes the available column list.
+    """
     norm = {c: _normalize_label(c) for c in columns}
 
     def pick(predicate, *, exclude=None):
