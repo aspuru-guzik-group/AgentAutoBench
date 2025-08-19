@@ -34,27 +34,85 @@ df_num.index = df_num.index.astype(str)
 # 2) Structure helpers (RDKit)
 # -----------------------------
 def smiles_cycloalkane(k: int) -> str:
-    # k=3 -> C1CC1, k=4 -> C1CCC1, ..., k=8 -> C1CCCCCCC1
+    """
+    Generates a SMILES string for a cycloalkane ring of size k.
+
+    Follows the pattern "C1" + "C"*(k-1) + "1" (e.g., k=3 → "C1CC1",
+    k=4 → "C1CCC1", k=8 → "C1CCCCCCC1").
+
+    Args:
+        k (int): Ring size (number of carbon atoms), must be ≥ 3.
+
+    Returns:
+        str: SMILES for the cycloalkane of ring size k.
+
+    Raises:
+        ValueError: If k < 3.
+    """
     if k < 3:
         raise ValueError("Cycloalkane ring size must be >= 3")
     return "C1" + "C" * (k - 1) + "1"
 
+
 def smiles_methylcycloalkane(k: int) -> str:
-    # Methyl attached to the ring: k=3 -> CC1CC1; k=5 -> CC1CCCC1
+    """
+    Generates a SMILES string for a methyl-substituted cycloalkane of size k.
+
+    Uses the pattern "CC1" + "C"*(k-1) + "1" (e.g., k=3 → "CC1CC1",
+    k=5 → "CC1CCCC1"), which places a methyl group on the ring.
+
+    Args:
+        k (int): Ring size (number of carbon atoms in the ring), must be ≥ 3.
+
+    Returns:
+        str: SMILES for the methylcycloalkane of ring size k.
+
+    Raises:
+        ValueError: If k < 3.
+    """
     if k < 3:
         raise ValueError("Ring size must be >= 3")
     return "CC1" + "C" * (k - 1) + "1"
 
+
 def inchikey_from_smiles(smiles: str) -> str:
+    """
+    Converts a SMILES string to an InChIKey using RDKit.
+
+    Parses the SMILES to an RDKit molecule and produces the standardized
+    InChIKey via RDKit's InChI module.
+
+    Args:
+        smiles (str): Valid SMILES string.
+
+    Returns:
+        str: 27-character InChIKey corresponding to the input SMILES.
+
+    Raises:
+        ValueError: If the SMILES cannot be parsed into a molecule.
+    """
     m = Chem.MolFromSmiles(smiles)
     if m is None:
         raise ValueError(f"Cannot parse SMILES: {smiles}")
     return inchi.MolToInchiKey(m)
 
+
 def inchikey_from_xyz(xyz_path: Path) -> str:
     """
-    Read XYZ -> infer bonds -> InChIKey (RDKit).
-    Works well for neutral hydrocarbons used here.
+    Generates an InChIKey from an XYZ file by inferring bonding (RDKit).
+
+    Attempts to load the molecule from the XYZ file, infers bonds from geometry,
+    sanitizes the molecule when possible, and returns the InChIKey. This routine
+    is designed for neutral hydrocarbons commonly used here.
+
+    Args:
+        xyz_path (Path): Path to an XYZ file containing coordinates.
+
+    Returns:
+        str: 27-character InChIKey derived from the XYZ structure.
+
+    Raises:
+        ValueError: If the XYZ file cannot be read or parsed into a molecule.
     """
     # Try direct file read
     m = Chem.MolFromXYZFile(str(xyz_path))
@@ -76,9 +134,24 @@ def inchikey_from_xyz(xyz_path: Path) -> str:
 
     return inchi.MolToInchiKey(m)
 
+
 def _pick_primary_xyz(folder: Path):
     """
-    Prefer *.xyz not named *_trj.xyz or *_initial.xyz; else *_initial.xyz; else first *.xyz.
+    Selects a primary XYZ file from a folder using simple heuristics.
+
+    Preference order:
+      1) Any *.xyz not matching '*_trj.xyz' or '*_initial.xyz'
+      2) Otherwise, a file ending with '_initial.xyz'
+      3) Otherwise, the first '*.xyz' by name
+
+    Args:
+        folder (Path): Directory to search for XYZ files.
+
+    Returns:
+        Optional[Path]: Chosen XYZ file path, or None if no '*.xyz' files exist.
+
+    Raises:
+        None.
     """
     xyzs = sorted(folder.glob("*.xyz"), key=lambda p: p.name)
     if not xyzs:
@@ -91,9 +164,32 @@ def _pick_primary_xyz(folder: Path):
         return initials[0]
     return xyzs[0]
 
+
 def build_structure_index(root_dir: Path):
     """
-    Build: InChIKey -> {'folder': <folder name>, 'xyz': <Path>}
+    Builds an index of unique structures keyed by InChIKey.
+
+    Iterates over immediate subfolders of root_dir (skipping 'results' and
+    'jobinfo'), picks a primary XYZ via _pick_primary_xyz, converts it to an
+    InChIKey, and records the first occurrence. Subsequent duplicates (same
+    InChIKey) are ignored.
+
+    The resulting index has the form:
+        {
+          "<InChIKey>": {"folder": "<folder name>", "xyz": <Path>},
+          ...
+        }
+
+    Args:
+        root_dir (Path): Project directory whose subfolders contain structure files.
+
+    Returns:
+        dict[str, dict]: Mapping from InChIKey to a dict with keys:
+            - 'folder' (str): Source folder name.
+            - 'xyz' (Path): Path to the chosen XYZ file.
+
+    Raises:
+        None.
     """
     idx = {}
     for folder in root_dir.iterdir():
