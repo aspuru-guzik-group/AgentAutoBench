@@ -3,7 +3,7 @@ Save these scripts into the final result folder that is generated from elagentew
 Run everything in the virtual environment to make sure that the MongoDB connection is successful. 
 
 the rubric is like: 
-RUBRIC = {
+'RUBRIC = {
     "section1": {  # 8 molecules × 8 checks = 64
         "columns": [
             "Method exist?",
@@ -32,7 +32,7 @@ RUBRIC = {
         "pka_half": 6.0,
         "max_points": 24.0,
     }
-}
+}'
 
 1. Run the General_Boolean.py first, to extract the 8 key properties from the ORCA input file and ORCA output file for each molecule, and save into a .csv file.
 
