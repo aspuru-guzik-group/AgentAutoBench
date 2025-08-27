@@ -43,10 +43,10 @@ the rubric is like:
 4. Run the LLM_for_extraction.py, which use LLM to generate needed value from the final_report.md file, and save the context into a .csv file. 
 
 5. Run the pKa_score_generator.py, which type following in the terminal:
-     python pKa_score_generator.py \
+     `python pKa_score_generator.py \
   --booleans /absolute/path/booleans_8x8.csv \
   --deltag /absolute/path/deltag.csv \
   --trace /absolute/path/agent_trace.json \
   --report /absolute/path/pka_report.csv \
-  --out /absolute/path/grading_report.csv
+  --out /absolute/path/grading_report.csv`
 (make sure to replace the absolute file path in the corrsponding sections), and it will generate the final score for the benchmarking. 
