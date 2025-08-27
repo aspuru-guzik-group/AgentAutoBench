@@ -57,6 +57,41 @@ def extract_action_trace_json(session_name: str,
 
     # post-filter
     def _post_filter(data):
+    """
+    Filters an agent trace by agent/tool and trims long tool outputs.
+
+    A step is **kept** if:
+      • `include_agents` is non-empty and the step's `agent` is in it, OR
+      • `include_tools` is non-empty and the step used at least one tool whose
+        `tool_name` is in `include_tools`, OR
+      • both `include_agents` and `include_tools` are empty (keep everything).
+
+    For each kept step:
+      • If `include_tools` is provided, `tool_calls` are filtered to those tools only.
+      • Any string `output` longer than `trim_output` characters is truncated and
+        suffixed with `" …[truncated]"`.
+      • If `drop_empty` is True **and** `include_tools` is provided, steps that end up
+        with no remaining `tool_calls` are dropped unless their `agent` was explicitly
+        included via `include_agents`.
+
+    The input dict is not mutated; a shallow copy is returned with a rewritten
+    `"agent_trace"` list.
+
+    Args:
+        data (dict): Trace payload (as returned by `extract_action_trace`) with:
+            - "agent_trace" (list[dict]): Each step may contain:
+                * "timestamp" (str)
+                * "agent" (str)
+                * "message_to_agent" (str)
+                * "tool_calls" (list[dict]) with keys like "tool_name", "output", ...
+
+    Returns:
+        dict: A new dict with all top-level keys from `data`, except that
+        `"agent_trace"` contains only the filtered/transformed steps as described.
+
+    Raises:
+        None.
+    """
         kept = []
         for step in data.get("agent_trace", []):
             keep = False
