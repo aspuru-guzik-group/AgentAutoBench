@@ -33,4 +33,17 @@ Typical applications include:
 - Workflow validation for research pipelines  
 - Batch evaluation of computational methods or parameters  
 
-Each case runs independently and outputs structured JSON and CSV summaries suitable for downstream analysis.
+Each case runs independently and outputs structured JSON or CSV summaries suitable for downstream analysis.
+
+---
+
+## 🚀 Running Auto_benchmark
+
+You can run a benchmark job directly from the command line:
+
+```
+python -m Auto_benchmark.Client.run_job \
+    --session <session_name> \
+    --case <case_name> \
+    --input <input_file>
+```
