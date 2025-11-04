@@ -8,9 +8,11 @@ __all__ = [
     "check_output_tddft",
 ]
 
+# Recognize both singlet and triplet TD-DFT/TDA excited-state sections
 HEADER_SINGLET_RE = re.compile(r"TD-DFT(?:/TDA)?\s+EXCITED\s+STATES\s*\(SINGLET[S]?\)", re.I)
+HEADER_TRIPLET_RE = re.compile(r"TD-DFT(?:/TDA)?\s+EXCITED\s+STATES\s*\(TRIPLET[S]?\)", re.I)
 
-# NEW: absorption-spectrum header used by ORCA for oscillator strengths
+# absorption-spectrum header used by ORCA for oscillator strengths
 ABS_SPECTRUM_HDR_RE = re.compile(
     r"ABSORPTION\s+SPECTRUM\s+VIA\s+TRANSITION\s+ELECTRIC\s+DIPOLE\s+MOMENTS",
     re.I,
@@ -22,18 +24,27 @@ F_PATTERN = re.compile(r"\bf\s*=\s*[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?", re.I)
 # OPTIONAL: explicitly look for the fosc(D2) column token
 FOSC_HEADER_RE = re.compile(r"\bfosc\s*\(\s*D2\s*\)", re.I)
 
-def _singlet_blocks(text: str) -> list[str]:
+def _blocks(text: str, header_re: re.Pattern) -> list[str]:
     blocks: list[str] = []
-    for m in HEADER_SINGLET_RE.finditer(text):
+    for m in header_re.finditer(text):
         start = m.end()
-        next_hdr = HEADER_SINGLET_RE.search(text, pos=start)
-        end = next_hdr.start() if next_hdr else len(text)
+        next_same = header_re.search(text, pos=start)
+        end = next_same.start() if next_same else len(text)
         blocks.append(text[start:end])
     return blocks
 
+
+def _singlet_blocks(text: str) -> list[str]:
+    return _blocks(text, HEADER_SINGLET_RE)
+
+
+def _triplet_blocks(text: str) -> list[str]:
+    return _blocks(text, HEADER_TRIPLET_RE)
+    
+
 def tddft_block_executed(out_text: str) -> bool:
     """True if a TD-DFT/TDA excited-states (SINGLETS) block is present."""
-    return bool(_singlet_blocks(out_text))
+    return bool(_singlet_blocks(out_text) or _triplet_blocks(out_text))
 
 def excitation_energy_exist(out_text: str) -> bool:
     """Energy evidence either as `E=` in singlet block OR in absorption spectrum table."""
