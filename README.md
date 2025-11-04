@@ -1,9 +1,36 @@
-# AgentAutoBench
+# 🧪 Auto_benchmark
 
-Including all coding for different types of benchmarking cases
+Following the architecture of automated scientific workflows, **Auto_benchmark** provides a modular and extensible system for running, grading, and verifying computational chemistry benchmarks.
 
-Remember to change the root_dir and the output name based on question type before executing the script. 
+The system handles input discovery, output parsing, data extraction, grading logic, and final report generation.  
+Each benchmark case can be executed automatically and summarized into standardized tables or JSON reports.
 
-The sequence of loading the script would be specify in each folder, but the general sequence is the same. 
+---
 
-General sequence: Run the General_Boolean.py first, then run the specific script for different types of question, then run the score_generator in the end. 
+## Overview
+
+Auto_benchmark is designed to streamline and standardize computational benchmarking tasks such as molecular property prediction, thermochemical validation, or spectroscopic calibration.
+
+The system consists of several modular components:
+
+| Module | Role |
+|--------|------|
+| **Checks** | Perform validation and consistency checks on computed results |
+| **Client** | Command-line interface and execution controller |
+| **Config** | Environment defaults, regex patterns, and path configuration |
+| **Extractors** | Parse output files and extract target quantities |
+| **Grading** | Benchmark grading and reference comparison |
+| **io** | Input/output management, file handling, and serialization |
+| **registry** | Registry of available benchmark cases |
+| **Verify** | Final verification and report consolidation |
+
+---
+
+## Use Case
+
+Typical applications include:
+- Automated quantum chemistry benchmarking  
+- Workflow validation for research pipelines  
+- Batch evaluation of computational methods or parameters  
+
+Each case runs independently and outputs structured JSON and CSV summaries suitable for downstream analysis.
