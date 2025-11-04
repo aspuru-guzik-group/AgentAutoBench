@@ -13,19 +13,21 @@ def geo_opt_converged(text: str) -> bool:
     return bool(re.search(r"\*+\s*HURRAY\s*\*+.*OPTIMIZATION HAS CONVERGED", text, re.I | re.S))
 
 
-def imaginary_freq_not_exist(text: str) -> bool:
-    """True if *no* vibrational frequencies are negative (i.e., no imaginary modes)."""
-    freqs, in_block = [], False
-    for line in text.splitlines():
-        if re.search(r"VIBRATIONAL\s+FREQUENCIES", line, re.I):
-            in_block = True
-            continue
-        if in_block and not line.strip():
-            break
-        if in_block:
-            freqs += [float(n) for n in re.findall(r"[-+]?\d+\.\d+", line)]
-    # True only when all freqs >= 0
-    return all(f >= 0 for f in freqs) if freqs else True
+def imaginary_freq_not_exist(txt: str) -> bool:
+    """
+    True  → freqs present and all ≥ 0 (no imaginary)
+    False → freqs present and at least one < 0 (imaginary)
+    If no freqs found, return True (keeps the existing 'literal column' behavior).
+    """
+    try:
+        freqs = fs._extract_freqs(txt)  # handles cm-1 and cm**-1, and searches inside or outside the block
+    except Exception:
+        freqs = []
+
+    if not freqs:
+        return True
+
+    return all(f >= 0.0 for f in freqs)
 
 
 def check_output_opt(out_text: str) -> dict[str, str]:
