@@ -6,48 +6,13 @@ import re
 import pandas as pd
 
 from Auto_benchmark.Grading.Rubrics.TDDFT import RUBRIC_TDDFT
+from Auto_benchmark.io import fs
 
 __all__ = [
     "score_booleans_tddft",
     "score_numerical_tddft",
     "score_tddft_case",
 ]
-
-# ---------------- Helpers ----------------
-YES_VALUES = {"yes", "y", "true", "1", "t"}
-NO_VALUES  = {"no", "n", "false", "0", "f"}
-
-def is_yes(val: Any) -> bool:
-    s = str(val).strip().lower()
-    return s in YES_VALUES
-
-def is_no(val: Any) -> bool:
-    s = str(val).strip().lower()
-    return s in NO_VALUES
-
-def _find_column(df: pd.DataFrame, name: str) -> str:
-    """Robust header matching: exact (case-insensitive), then alnum-only fuzzy."""
-    norm = {str(c): c for c in df.columns}
-    want = name.strip().lower()
-    for k, v in norm.items():
-        if k.strip().lower() == want:
-            return v
-    want_alnum = re.sub(r"[^a-z0-9]+", "", want)
-    for k, v in norm.items():
-        if re.sub(r"[^a-z0-9]+", "", k.strip().lower()) == want_alnum:
-            return v
-    raise KeyError(f"Column not found: {name}")
-
-def _rel_error(gt: Optional[float], pred: Optional[float]) -> Optional[float]:
-    if gt is None or pred is None:
-        return None
-    try:
-        gt = float(gt); pred = float(pred)
-    except Exception:
-        return None
-    if gt == 0:
-        return None
-    return abs(pred - gt) / abs(gt)
 
 # ---------------- Boolean scoring (51 pts) ----------------
 def score_booleans_tddft(
@@ -66,10 +31,10 @@ def score_booleans_tddft(
 
     # 1) Input checks (×2 inputs)
     sec = rubric["boolean"]["input"]
-    inp_cols = [ _find_column(df, c) for c in sec["columns"] ]
+    inp_cols = [ fs._find_column(df, c) for c in sec["columns"] ]
     sec_pts = 0.0; per_row = []
     for _, row in df.iterrows():
-        row_pts = sum(sec["yes_score"] for c in inp_cols if is_yes(row.get(c)))
+        row_pts = sum(sec["yes_score"] for c in inp_cols if fs._is_yes(row.get(c)))
         per_row.append(row_pts)
         sec_pts += row_pts
     sec_pts *= sec.get("multiplicity", 1)
@@ -79,10 +44,10 @@ def score_booleans_tddft(
 
     # 2) Common output (SCF ×2)
     sec = rubric["boolean"]["common_output"]
-    scf_col = _find_column(df, sec["columns"][0])
+    scf_col = fs._find_column(df, sec["columns"][0])
     sec_pts = 0.0; per_row = []
     for _, row in df.iterrows():
-        pts = sec["yes_score"] if is_yes(row.get(scf_col)) else 0.0
+        pts = sec["yes_score"] if fs._is_yes(row.get(scf_col)) else 0.0
         per_row.append(pts)
         sec_pts += pts
     sec_pts *= sec.get("multiplicity", 1)
@@ -92,13 +57,13 @@ def score_booleans_tddft(
 
     # 3) Optimization output (Geo opt + Imag freq==no)
     sec = rubric["boolean"]["opt_output"]
-    geo_col  = _find_column(df, sec["columns_yes"][0])
-    imag_col = _find_column(df, sec["columns_no"][0])
+    geo_col  = fs._find_column(df, sec["columns_yes"][0])
+    imag_col = fs._find_column(df, sec["columns_no"][0])
     sec_pts = 0.0; per_row = []
     for _, row in df.iterrows():
         pts = 0.0
-        pts += sec["yes_score"] if is_yes(row.get(geo_col)) else 0.0
-        pts += sec["no_score"]  if is_no(row.get(imag_col)) else 0.0
+        pts += sec["yes_score"] if fs._is_yes(row.get(geo_col)) else 0.0
+        pts += sec["no_score"]  if fs._is_no(row.get(imag_col)) else 0.0
         per_row.append(pts)
         sec_pts += pts
     sec_pts = min(sec_pts, sec["max_points"])
@@ -107,10 +72,10 @@ def score_booleans_tddft(
 
     # 4) TDDFT block / energy / oscillator
     sec = rubric["boolean"]["tddft_output"]
-    tddft_cols = [ _find_column(df, c) for c in sec["columns"] ]
+    tddft_cols = [ fs._find_column(df, c) for c in sec["columns"] ]
     sec_pts = 0.0; per_row = []
     for _, row in df.iterrows():
-        pts = sum(sec["yes_score"] for c in tddft_cols if is_yes(row.get(c)))
+        pts = sum(sec["yes_score"] for c in tddft_cols if fs._is_yes(row.get(c)))
         per_row.append(pts)
         sec_pts += pts
     sec_pts = min(sec_pts, sec["max_points"])
@@ -139,7 +104,7 @@ def score_numerical_tddft(
     for name, cfg in crits.items():
         gt   = ground_truth.get(name)
         pred = agent.get(name)
-        rel  = _rel_error(gt, pred)
+        rel  = fs._rel_err(gt, pred)
         w    = cfg["weight"]
 
         if cfg.get("require_json_proof", False) and not json_proof:
