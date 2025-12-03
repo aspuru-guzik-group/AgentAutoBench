@@ -42,7 +42,7 @@ Each case runs independently and outputs structured JSON or CSV summaries suitab
 You can run a benchmark job directly from the command line:
 
 ```
-python -m Auto_benchmark.Client.run_job \
+python -m Auto_benchmark.Client.run.py \
     --job  <what_type_of_job_for_auto_benchmark> \
     --root <root_directory_of_data> \
     --output <output_file_path>
