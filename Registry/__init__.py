@@ -1,4 +1,9 @@
-# Auto_benchmark/registry/__init__.py
-from .jobs import get_job
+"""
+Registry package initialization.
 
-__all__ = ["get_job"]
+Exposes the Base Benchmark Class and the Job Registry Map.
+"""
+from .base import BenchmarkJob
+from .jobs import JOB_MAP
+
+__all__ = ["BenchmarkJob", "JOB_MAP"]
