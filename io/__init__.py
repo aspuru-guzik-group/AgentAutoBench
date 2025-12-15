@@ -17,13 +17,16 @@ from . import readers
 
 # Re-export commonly used helpers for convenience
 from .fs import (
-    iter_child_folders,
+    _extract_freqs,
+    _read_primary_out,
+    find_best_out_for_qc,
     folder_has_real_freqs,
+    has_non_slurm_out,
     inchikey_from_smiles,
     inchikey_from_xyz,
-    build_structure_index,
+    _pick_primary_xyz,
+    iter_child_folders,
     select_unique_by_inchikey,
-    has_non_slurm_out,
 )
 
 from .readers import read_text_safe
@@ -33,13 +36,16 @@ __all__ = [
     "fs",
     "readers",
     # fs helpers
-    "iter_child_folders",
+    "_extract_freqs",
+    "_read_primary_out",
+    "find_best_out_for_qc",
     "folder_has_real_freqs",
+    "has_non_slurm_out",
     "inchikey_from_smiles",
     "inchikey_from_xyz",
-    "build_structure_index",
+    "_pick_primary_xyz",
+    "iter_child_folders", 
     "select_unique_by_inchikey",
-    "has_non_slurm_out",
     # readers helpers
     "read_text_safe",
 ]
