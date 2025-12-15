@@ -1,5 +1,7 @@
 from __future__ import annotations
 import re
+from Auto_benchmark.io import fs
+
 
 __all__ = [
     "geo_opt_converged",
