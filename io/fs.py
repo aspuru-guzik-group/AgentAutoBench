@@ -1,18 +1,31 @@
+# Auto_benchmark/io/fs.py
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional
 import re
-import os
-import pandas as pd
-
 from Auto_benchmark.Config import defaults
 
-from rdkit import Chem
-from rdkit.Chem import rdmolfiles, rdDetermineBonds
-from rdkit.Chem import inchi as rd_inchi
+# RDKit imports (wrapped to avoid crash if missing, though likely required)
+try:
+    from rdkit import Chem
+    from rdkit.Chem import rdmolfiles, rdDetermineBonds
+    from rdkit.Chem import inchi as rd_inchi
+except ImportError:
+    Chem = None
 
-# ---------- freq parsing ----------
+# ---------- Freq / Output Parsing Utilities ----------
+
 def _extract_freqs(txt: str) -> List[float]:
+    """
+    Extract vibrational frequencies from ORCA output text.
+    Searches first within the 'VIBRATIONAL FREQUENCIES' block, then globally.
+
+    Args:
+        txt (str): The output file content.
+
+    Returns:
+        List[float]: A list of extracted frequency values.
+    """
     lines = txt.splitlines()
     block_start = None
     for i, line in enumerate(lines):
@@ -28,13 +41,35 @@ def _extract_freqs(txt: str) -> List[float]:
     return candidates
 
 def _read_primary_out(folder: Path) -> Optional[Path]:
+    """
+    Find a primary .out file in a folder, preferring 'orca.out'.
+
+    Args:
+        folder (Path): The directory to search.
+
+    Returns:
+        Optional[Path]: The path to the selected output file, or None.
+    """
     outs = [p for p in folder.glob(defaults.OUT_GLOB)
             if not p.name.lower().startswith(defaults.SKIP_OUTFILE_PREFIXES)]
     if not outs:
         return None
-    return next((p for p in outs if p.name.lower() == "orca.out"), outs[0])
+    # If explicit 'orca.out' exists, prefer it
+    return next((p for p in outs if p.name.lower() == defaults.PRIMARY_OUT_FILENAME), outs[0])
 
 def find_best_out_for_qc(folder: Path) -> Optional[Path]:
+    """
+    Find the best .out file for QC checks (e.g., frequencies).
+    Prioritizes files with real frequencies over those with imaginary or no frequencies.
+
+    Rank: 0=All Freqs Real, 1=No Freqs, 2=Imaginary Freqs, 3=Unreadable
+
+    Args:
+        folder (Path): The directory to search.
+
+    Returns:
+        Optional[Path]: The best candidate output file.
+    """
     outs = [p for p in folder.glob(defaults.OUT_GLOB)
             if not p.name.lower().startswith(defaults.SKIP_OUTFILE_PREFIXES)]
     if not outs:
@@ -47,16 +82,26 @@ def find_best_out_for_qc(folder: Path) -> Optional[Path]:
             return (3, p.name.lower())
         freqs = _extract_freqs(txt)
         if not freqs:
-            return (1, p.name.lower())  # no freq block → neutral
+            return (1, p.name.lower())
         return (0 if all(f >= 0.0 for f in freqs) else 2, p.name.lower())
 
     best = min(outs, key=_rank)
+    # If the 'best' isn't perfect (rank 0), check if 'orca.out' exists and use it as fallback anchor
     if _rank(best)[0] != 0:
         prim = _read_primary_out(folder)
         return prim if prim else best
     return best
 
 def folder_has_real_freqs(folder: Path) -> Optional[bool]:
+    """
+    Check if the primary output in the folder has only real frequencies.
+
+    Args:
+        folder (Path): The directory to check.
+
+    Returns:
+        Optional[bool]: True if real freqs exist, False if imaginary exists, None if unreadable.
+    """
     outp = _read_primary_out(folder)
     if outp is None:
         return None
@@ -69,14 +114,57 @@ def folder_has_real_freqs(folder: Path) -> Optional[bool]:
         return None
     return all(f >= 0.0 for f in freqs)
 
-# ---------- RDKit helpers ----------
+def has_non_slurm_out(folder: Path) -> bool:
+    """
+    Check if folder contains any .out file that isn't a slurm log.
+
+    Args:
+        folder (Path): The directory to check.
+
+    Returns:
+        bool: True if a valid output file exists.
+    """
+    outs = [p for p in folder.glob(defaults.OUT_GLOB)]
+    outs = [p for p in outs if not p.name.lower().startswith(defaults.SKIP_OUTFILE_PREFIXES)]
+    return bool(outs)
+
+# ---------- RDKit / Structure Helpers ----------
+
 def inchikey_from_smiles(smiles: str) -> str:
+    """
+    Generate InChIKey from a SMILES string.
+
+    Args:
+        smiles (str): The SMILES string.
+
+    Returns:
+        str: The InChIKey.
+
+    Raises:
+        ImportError: If RDKit is not installed.
+        ValueError: If SMILES parsing fails.
+    """
+    if Chem is None: raise ImportError("RDKit not installed.")
     m = Chem.MolFromSmiles(smiles)
     if m is None:
         raise ValueError(f"Cannot parse SMILES: {smiles}")
     return rd_inchi.MolToInchiKey(m)
 
 def inchikey_from_xyz(xyz_path: Path) -> str:
+    """
+    Generate InChIKey from an XYZ file.
+
+    Args:
+        xyz_path (Path): Path to the XYZ file.
+
+    Returns:
+        str: The InChIKey.
+
+    Raises:
+        ImportError: If RDKit is not installed.
+        ValueError: If XYZ reading fails.
+    """
+    if Chem is None: raise ImportError("RDKit not installed.")
     m = None
     try:
         m = rdmolfiles.MolFromXYZFile(str(xyz_path))
@@ -95,6 +183,15 @@ def inchikey_from_xyz(xyz_path: Path) -> str:
     return rd_inchi.MolToInchiKey(m)
 
 def _pick_primary_xyz(folder: Path) -> Optional[Path]:
+    """
+    Heuristic to pick the main XYZ file (skipping trajectories/initials).
+
+    Args:
+        folder (Path): The directory to search.
+
+    Returns:
+        Optional[Path]: The best candidate XYZ file.
+    """
     xyzs = sorted(folder.glob("*.xyz"), key=lambda p: p.name)
     if not xyzs:
         return None
@@ -106,13 +203,18 @@ def _pick_primary_xyz(folder: Path) -> Optional[Path]:
         return initials[0]
     return xyzs[0]
 
-def has_non_slurm_out(folder: Path) -> bool:
-    outs = [p for p in folder.glob(defaults.OUT_GLOB)]
-    outs = [p for p in outs if not p.name.lower().startswith(defaults.SKIP_OUTFILE_PREFIXES)]
-    return bool(outs)
+# ---------- Folder Iteration & Selection ----------
 
-# ---------- listing ----------
 def iter_child_folders(root: Path) -> List[Path]:
+    """
+    Return list of subdirectories, filtering out SKIP_DIRS.
+
+    Args:
+        root (Path): The root directory.
+
+    Returns:
+        List[Path]: A list of valid subdirectory paths.
+    """
     root = Path(root)
     folders: List[Path] = []
     for p in sorted(root.iterdir()):
@@ -123,31 +225,17 @@ def iter_child_folders(root: Path) -> List[Path]:
         folders.append(p)
     return folders
 
-# ---------- structure index + representatives (with robust fallback) ----------
-def build_structure_index(root_dir: Path) -> Dict[str, Dict[str, object]]:
-    """
-    Key: structure key (InChIKey when possible; else a name-based fallback)
-    """
-    idx: Dict[str, Dict[str, object]] = {}
-    for folder in iter_child_folders(root_dir):
-        key: Optional[str] = None
-        xyz = _pick_primary_xyz(folder)
-        if xyz:
-            try:
-                key = inchikey_from_xyz(xyz)
-            except Exception:
-                key = None
-        if key is None:
-            # Fallback so folders like C4H8 (bad XYZ) still participate
-            key = f"__name__:{folder.name.lower()}"
-        # first occurrence wins
-        idx.setdefault(key, {"folder": folder, "xyz": xyz})
-    return idx
-
 def select_unique_by_inchikey(root_dir: Path, *, prefer_real_freqs: bool = True) -> List[Path]:
     """
-    One representative per structure. If XYZ→InChIKey fails, we use a
-    name-based fallback key so the folder is not dropped.
+    Select one representative folder per unique structure (InChIKey).
+    Falls back to folder name if XYZ parsing fails.
+
+    Args:
+        root_dir (Path): The root directory to scan.
+        prefer_real_freqs (bool): If True, prefer folders with real frequencies when duplicates exist.
+
+    Returns:
+        List[Path]: A list of representative folder paths.
     """
     groups: Dict[str, List[Path]] = {}
     for folder in iter_child_folders(root_dir):
@@ -159,7 +247,8 @@ def select_unique_by_inchikey(root_dir: Path, *, prefer_real_freqs: bool = True)
             except Exception:
                 key = None
         if key is None:
-            key = f"__name__:{folder.name.lower()}"  # ← fallback to include folder
+            # Fallback to name-based key
+            key = f"__name__:{folder.name.lower()}"
         groups.setdefault(key, []).append(folder)
 
     reps: List[Path] = []
@@ -179,68 +268,3 @@ def select_unique_by_inchikey(root_dir: Path, *, prefer_real_freqs: bool = True)
         reps.append(chosen)
 
     return reps
-
-# ---------- scorer common helpers ----------
-def _norm_str(x: Any) -> str:
-    return str(x).strip().lower()
-
-def _is_yes(x: Any) -> bool:
-    if isinstance(x, bool):
-        return x
-    if x is None:
-        return False
-    return _norm_str(x) in defaults.YES_VALUES
-
-def _is_no(x: Any) -> bool:
-    if isinstance(x, bool):
-        return not x
-    if x is None:
-        return False
-    return _norm_str(x) in defaults.NO_VALUES
-
-
-def _abs_err(gt: Optional[float], pred: Optional[float]) -> Optional[float]:
-    """
-    Compute absolute error between ground truth and prediction.
-    Returns None if any value is invalid or missing.
-    """
-    if gt is None or pred is None:
-        return None
-    try:
-        gt = float(gt)
-        pred = float(pred)
-        return abs(pred - gt)
-    except Exception:
-        return None
-
-
-def _rel_err(gt: Optional[float], pred: Optional[float]) -> Optional[float]:
-    """
-    Compute relative error between ground truth and prediction.
-    Returns None if ground truth is 0 or any value is invalid.
-    """
-    abs_err = _abs_err(gt, pred)
-    if abs_err is None:
-        return None
-
-    try:
-        gt = float(gt)
-        if gt == 0:
-            return None
-        return abs_err / abs(gt)
-    except Exception:
-        return None
-    
-
-def _find_column(df: pd.DataFrame, name: str) -> str:
-    """Robust header matching: exact (case-insensitive), then alnum-only fuzzy."""
-    norm = {str(c): c for c in df.columns}
-    want = name.strip().lower()
-    for k, v in norm.items():
-        if k.strip().lower() == want:
-            return v
-    want_alnum = re.sub(r"[^a-z0-9]+", "", want)
-    for k, v in norm.items():
-        if re.sub(r"[^a-z0-9]+", "", k.strip().lower()) == want_alnum:
-            return v
-    raise KeyError(f"Column not found: {name}")
