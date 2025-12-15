@@ -1,30 +1,34 @@
+# Auto_benchmark/Config/defaults.py
 from __future__ import annotations
-from pathlib import Path
+import re
 
 # -------- File discovery patterns -------- #
 INP_GLOB: str = "*.inp"
 OUT_GLOB: str = "*.out"
+PRIMARY_OUT_FILENAME: str = "orca.out"
+REPORT_DIR_NAME: str = "reports"
 
 # Exclude these directory names anywhere in the path (case-insensitive)
-SKIP_DIRS: set[str] = {"results", "jobinfo", "logs", "reports"}
+SKIP_DIRS: set[str] = {"results", "jobinfo", "logs", "reports", "figures"}
 
 # Output files to skip by prefix (case-insensitive)
 SKIP_OUTFILE_PREFIXES: tuple[str, ...] = ("slurm",)
 
-# Default outputs
+# Report Filenames (in order of preference)
+REPORT_FILENAMES: list[str] = [
+    "Photophysical_Properties_Final_Report.md",
+    "TDDFT_Report.md", "tddft_report.md",
+    "pka_calculation_report.md", "pKa_calculation_report.md",
+    "RingStrain_Report.md", "ring_strain.md", "ringstrain.md",
+    "Fukui_Report.md", "fukui_report.md",
+    "S1_T1_summary.md"
+]
+
 DEFAULT_OUTPUT_CSV: str = "auto_benchmark_boolean_report.csv"
 
 # -------- Job detection & priority -------- #
 TASK_PRIORITY: list[str] = [
-    "FREQ",
-    "OPT",
-    "SP",
-    "TDDFT",
-    "CIS",
-    "MD",
-    "NEB",
-    "NMR",
-    "EPR",
+    "FREQ", "OPT", "SP", "TDDFT", "CIS", "MD", "NEB", "NMR", "EPR"
 ]
 
 # Composite methods that imply an internal compact basis in ORCA.
@@ -35,9 +39,7 @@ HARTREE_TO_KCAL = 627.5094740631
 
 # --- regex patterns ---
 RINGNUM_RE = re.compile(r"(?<!\d)(\d+)(?!\d)")
-# tolerate 'methyl' prefix inside compound tokens
 METHYL_RE = re.compile(r"(?i)methyl")
-# token-only variant (avoid matching 'metal')
 ME_TOKEN  = re.compile(r"(?i)\bme\b")
 
 # --- mapping of name → ring size ---
@@ -48,7 +50,6 @@ RINGNAME_MAP = {
     "cyclohexane": 6,
     "cycloheptane": 7,
     "cyclooctane": 8,
-    # tolerate truncated variants (e.g. 'cyclohexan')
     "cyclopropan": 3,
     "cyclobutan": 4,
     "cyclopentan": 5,
