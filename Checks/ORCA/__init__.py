@@ -9,10 +9,12 @@ can import them succinctly, e.g.::
         check_output_opt,
         tddft_block_executed, excitation_energy_exist, oscillator_strengths_available,
         check_output_tddft,
+        extract_orca_task,
+        mulliken_exist, hirshfeld_exist, loewdin_exist,
     )
 
 If you prefer per-module imports, you can always import from the concrete
-modules (input_checks, output_common, output_opt, output_tddft).
+modules (input_checks, output_common, output_opt, output_tddft, fukui_input, fukui_output).
 """
 
 # Input checks
@@ -22,6 +24,13 @@ from .input_checks import (  # noqa: F401
     tasks_exist,
     charge_mult_exist,
     xyz_exist,
+)
+
+# Input checks for el agente_v2 (The Standard Trio)
+from .input_checks_v2 import (  # noqa: F401
+    check_input_exists,
+    extract_orca_task,
+    verify_structure,
 )
 
 # Output common (applies to all job types)
@@ -42,3 +51,9 @@ from .output_TDDFT import (  # noqa: F401
     check_output_tddft,
 )
 
+# Fukui-specific checks
+from .output_fukui import (  # noqa: F401
+    mulliken_exist,
+    hirshfeld_exist,
+    loewdin_exist,
+)
