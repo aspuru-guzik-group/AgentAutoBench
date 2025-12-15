@@ -12,6 +12,7 @@ from .RingStrain import (
     score_numerical_ringstrain,
     score_ringstrain,
 )
+from .Fukui import score_fukui_case
 
 __all__ = [
     # pKa
@@ -27,4 +28,7 @@ __all__ = [
     "score_reference_ringstrain",
     "score_numerical_ringstrain",
     "score_ringstrain",
+    
+    # Fukui
+    "score_fukui_case",
 ]
