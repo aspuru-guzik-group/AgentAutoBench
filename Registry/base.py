@@ -70,9 +70,52 @@ class BenchmarkJob(ABC):
         return fs.select_unique_by_inchikey(self.root, prefer_real_freqs=True)
 
     @abstractmethod
+    def check_inputs(self, context: Any) -> Dict[str, Any]:
+        """
+        Step 1: Perform input validity checks.
+        
+        Args:
+            context (Any): Job-specific context (e.g., file mapping).
+            
+        Returns:
+            Dict[str, Any]: Boolean results for input checks.
+        """
+        pass
+    
+    @abstractmethod
+    def check_outputs(self, context: Any) -> Dict[str, Any]:
+        """
+        Step 2: Perform output validity checks.
+        
+        Args:
+            context (Any): Job-specific context (e.g., file mapping).
+            
+        Returns:
+            Dict[str, Any]: Boolean results for output checks.
+        """
+        pass
+    
+    @abstractmethod
+    def calculate_ground_truth(self, context: Any) -> Dict[str, Any]:
+        """
+        Step 3: Calculate ground truth values from the outputs.
+        
+        Args:
+            context (Any): Job-specific context (e.g., file mapping).
+            
+        Returns:
+            Dict[str, Any]: The calculated ground truth data.
+        """
+        pass
+
+    @abstractmethod
     def process_folder(self, folder: Path) -> Dict[str, Any]:
         """
         Extract data (Booleans + Ground Truth) from a single folder.
+        Combine funtion as the following steps ideally: 
+        1. check_inputs
+        2. check_outputs
+        3. calculate_ground_truth
 
         Args:
             folder (Path): The folder to process.
@@ -108,7 +151,8 @@ class BenchmarkJob(ABC):
             Dict[str, Any]: The final scoring result payload.
         """
         pass
-
+    
+    @abstractmethod
     def run(self) -> Dict[str, Any]:
         """
         Main execution template method.
@@ -116,45 +160,4 @@ class BenchmarkJob(ABC):
         Returns:
             Dict[str, Any]: The complete benchmark result.
         """
-        if self.debug:
-            print(f"[DEBUG] Starting job: {self.__class__.__name__}")
-
-        # 1. Find Report
-        report_path = self.find_report()
-        if self.debug:
-            print(f"[DEBUG] Report found: {report_path}")
-
-        # 2. Extract Agent Data
-        agent_data = self.extract_agent_data(report_path)
-
-        # 3. Scan & Process Folders
-        folders = self.scan_folders()
-        if self.debug:
-            print(f"[DEBUG] Processing {len(folders)} folders...")
-
-        folder_results = []
-        for folder in folders:
-            # Skip filtered folders
-            if any(s in folder.name.lower() for s in defaults.SKIP_DIRS):
-                continue
-                
-            try:
-                res = self.process_folder(folder)
-                folder_results.append(res)
-            except Exception as e:
-                if self.debug:
-                    print(f"[DEBUG] Failed to process {folder.name}: {e}")
-
-        # 4. Score
-        score_output = self.score_all(folder_results, agent_data)
-
-        # 5. Construct Final Payload
-        return {
-            "job_type": self.__class__.__name__,
-            "root": str(self.root.resolve()),
-            "report_path": str(report_path) if report_path else None,
-            "folder_count": len(folders),
-            "results": folder_results, # Raw extracted data
-            "agent_extraction": agent_data,
-            "score": score_output
-        }
+        pass
