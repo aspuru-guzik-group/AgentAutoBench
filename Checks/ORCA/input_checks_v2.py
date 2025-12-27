@@ -1,9 +1,9 @@
 from __future__ import annotations
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union, List
 
-def check_input_exists(filepath: Optional[Path]) -> str:
+def check_input_exists(filepath: Optional[Path]) -> bool:
     """
     Simple check if the input file exists.
     
@@ -11,37 +11,37 @@ def check_input_exists(filepath: Optional[Path]) -> str:
         filepath (Optional[Path]): The path to the input file.
         
     Returns:
-        str: "yes" if file exists, "no" otherwise.
+        bool: True if file exists, False otherwise.
     """
-    return "yes" if filepath and filepath.exists() else "no"
+    return filepath is not None and filepath.exists()
 
-def extract_orca_task(input_text: str) -> str:
+def check_orca_task(input_text: str, task_to_check: Union[str, List[str]]) -> bool:
     """
-    Determines the calculation type (OPT vs SP) from the ORCA input text.
-    
-    Logic:
-    - Scans lines starting with '!' (keywords).
-    - If 'opt' or 'geometryoptimization' is found, returns 'OPT'.
-    - Otherwise, returns 'SP' (Single Point).
+    Checks if a specific task keyword (e.g., 'OPT', 'FREQ') exists in the ORCA input method line.
     
     Args:
         input_text (str): The content of the input file.
+        task_to_check (str | List[str]): The task keyword(s) to look for. 
+                                         If a list is provided, returns True if ANY of them are found.
         
     Returns:
-        str: "OPT" or "SP".
+        bool: True if the specified task is found, False otherwise.
     """
-    # Regex to find keyword lines (e.g. ! B3LYP def2-SVP OPT)
-    # Matches lines starting with ! (allowing for whitespace)
+    if isinstance(task_to_check, str):
+        target_keywords = {task_to_check.lower()}
+    else:
+        target_keywords = {t.lower() for t in task_to_check}
+    
     keyword_lines = re.findall(r"^!\s*(.+)", input_text, re.MULTILINE)
     
     for line in keyword_lines:
         lower_line = line.lower()
-        # Check for optimization keywords
-        if "opt" in lower_line or "geometryoptimization" in lower_line:
-            return "OPT"
+        
+        for target in target_keywords:
+            if target in lower_line:
+                return True
             
-    # Default to Single Point if no optimization keyword is found
-    return "SP"
+    return False
 
 def verify_structure(input_text: str, folder_path: Path) -> str:
     """
