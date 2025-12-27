@@ -1,51 +1,33 @@
+# Auto_benchmark/registry/jobs/Fukui.py
 from __future__ import annotations
 from typing import Dict, Any, List, Optional
 from pathlib import Path
-import pandas as pd
 
 from Auto_benchmark.registry.base import BenchmarkJob
 from Auto_benchmark.Grading.Rubrics.Fukui import RUBRIC_FUKUI
 from Auto_benchmark.Grading.Scorer.Fukui import score_fukui_case
-from Auto_benchmark.Extractors.Fukui import calculate_fukui_indices, extract_fukui_from_md
+from Auto_benchmark.Extractors.Fukui.Fukui_calc import calculate_fukui_indices
+from Auto_benchmark.Extractors.Fukui.Fukui_extract_from_md import extract_fukui_from_md
 from Auto_benchmark.io import readers
 from Auto_benchmark.Checks.ORCA import (
-    input_checks_v2 as ic, 
-    output_common as oc, 
-    output_opt as oopt, 
-    output_fukui as foc
+    input_checks_v2 as input_checks, 
+    output_common as output_checks, 
+    output_opt as opt_output_checks, 
+    output_fukui as fukui_output_checks
 )
 
 class FukuiJob(BenchmarkJob):
     """Benchmark job for Fukui Index calculations."""
 
     def load_rubric(self) -> Dict[str, Any]:
-        """
-        Loads the Fukui rubric.
-
-        Returns:
-            Dict[str, Any]: The rubric.
-        """
         return RUBRIC_FUKUI
 
     def scan_folders(self) -> List[Path]:
-        """
-        Fukui uses the root directory as the single 'folder' context.
-
-        Returns:
-            List[Path]: A list containing just the root directory.
-        """
+        # Fukui typically treats the entire root as one calculation context
         return [self.root] 
 
-    def process_folder(self, folder: Path) -> Dict[str, Any]:
-        """
-        Processes the Fukui calculation set (Anion, Cation, Neutral, OPT).
-
-        Args:
-            folder (Path): The root folder.
-
-        Returns:
-            Dict[str, Any]: Extracted booleans and ground truth.
-        """
+    def _identify_files(self, folder: Path) -> Dict[str, Dict[str, Optional[Path]]]:
+        """Helper to map files to roles (OPT, Anion, Neutral, Cation)."""
         all_files = list(folder.rglob("*"))
         files_map = {
             "OPT": {"inp": None, "out": None},
@@ -54,7 +36,6 @@ class FukuiJob(BenchmarkJob):
             "Cation": {"inp": None, "out": None},
         }
         
-        # Heuristic assignment of files to roles
         for f in all_files:
             if not f.is_file(): continue
             name = f.name.lower()
@@ -67,84 +48,92 @@ class FukuiJob(BenchmarkJob):
             if role:
                 if name.endswith(".inp"): files_map[role]["inp"] = f
                 elif name.endswith(".out"): files_map[role]["out"] = f
+        return files_map
 
-        # Booleans
+    def check_inputs(self, context: Dict[str, Any]) -> Dict[str, str]:
+        files_map = context
         bools = {}
-        
-        # 1. Input Checks (The Standard Trio V2)
         for role in ["OPT", "Anion", "Neutral", "Cation"]:
             inp_path = files_map[role]["inp"]
             
             # Check 1: Input Exists
-            bools[f"{role}_input_exist?"] = ic.check_input_exists(inp_path)
+            # input_checks.check_input_exists returns bool -> convert to "yes"/"no"
+            exists = input_checks.check_input_exists(inp_path)
+            bools[f"{role}_input_exist?"] = "yes" if exists else "no"
 
-            # Prepare for content-based checks
             task_match = "no"
             struct_valid = "no"
 
-            if inp_path and inp_path.exists():
-                # Read content safely
+            if exists:
+                # Safe to read because exists check passed
                 inp_text = readers.read_text_safe(inp_path)
                 
                 # Check 2: Task Match
-                target = "OPT" if role == "OPT" else "SP"
-                detected_task = ic.extract_orca_task(inp_text)
-                if detected_task == target:
+                # Target depends on role: "OPT" for OPT, "SP" for others.
+                target_task = "OPT" if role == "OPT" else "SP"
+                
+                # input_checks.check_orca_task returns bool -> update flag if True
+                if input_checks.check_orca_task(inp_text, target_task):
                     task_match = "yes"
                 
-                # Check 3: Structure Validity (New V2 Check)
-                # Pass inp_path.parent to check for external .xyz files
-                struct_valid = ic.verify_structure(inp_text, inp_path.parent)
+                # Check 3: Structure Validity
+                # input_checks.verify_structure returns "yes"/"no" string directly
+                struct_valid = input_checks.verify_structure(inp_text, inp_path.parent)
 
             bools[f"{role}_task_match?"] = task_match
             bools[f"{role}_structure_valid?"] = struct_valid
+        return bools
 
-        # 2. OPT Output Checks
+    def check_outputs(self, context: Dict[str, Any]) -> Dict[str, str]:
+        files_map = context
+        bools = {}
+        
+        # 1. OPT Output Checks
         opt_out = files_map["OPT"]["out"]
         opt_txt = readers.read_text_safe(opt_out) if opt_out else ""
-        bools["OPT_SCF_converged?"] = "yes" if oc.scf_converged(opt_txt) else "no"
-        bools["OPT_geo_opt_converged?"] = "yes" if oopt.geo_opt_converged(opt_txt) else "no"
-        bools["OPT_imag_freq_not_exist?"] = "yes" if oopt.imaginary_freq_not_exist(opt_txt) else "no"
+        bools["OPT_SCF_converged?"] = "yes" if output_checks.scf_converged(opt_txt) else "no"
+        bools["OPT_geo_opt_converged?"] = "yes" if opt_output_checks.geo_opt_converged(opt_txt) else "no"
+        bools["OPT_imag_freq_not_exist?"] = "yes" if opt_output_checks.imaginary_freq_not_exist(opt_txt) else "no"
 
-        # 3. SP Output Checks (Neutral, Anion, Cation)
+        # 2. SP Output Checks (Neutral, Anion, Cation)
         for role in ["Neutral", "Anion", "Cation"]:
             p = files_map[role]["out"]
             txt = readers.read_text_safe(p) if p else ""
-            bools[f"{role}_SCF_converged?"] = "yes" if oc.scf_converged(txt) else "no"
-            bools[f"{role}_Mulliken_exist?"] = "yes" if foc.mulliken_exist(txt) else "no"
-            bools[f"{role}_Hirshfeld_exist?"] = "yes" if foc.hirshfeld_exist(txt) else "no"
-            bools[f"{role}_Loewdin_exist?"] = "yes" if foc.loewdin_exist(txt) else "no"
+            bools[f"{role}_SCF_converged?"] = "yes" if output_checks.scf_converged(txt) else "no"
+            bools[f"{role}_Mulliken_exist?"] = "yes" if fukui_output_checks.mulliken_exist(txt) else "no"
+            bools[f"{role}_Hirshfeld_exist?"] = "yes" if fukui_output_checks.hirshfeld_exist(txt) else "no"
+            bools[f"{role}_Loewdin_exist?"] = "yes" if fukui_output_checks.loewdin_exist(txt) else "no"
+            
+        return bools
 
-        # Ground Truth Calculation
+    def calculate_ground_truth(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        files_map = context
         outs = [files_map[r]["out"] for r in ["Anion", "Neutral", "Cation"] if files_map[r]["out"]]
-        gt = calculate_fukui_indices(outs)
+        return calculate_fukui_indices(outs)
 
-        return {"Folder": folder.name, "booleans": bools, "ground_truth": gt}
+    def process_folder(self, folder: Path) -> Dict[str, Any]:
+        """
+        Orchestrates the processing of a single folder.
+        """
+        # 1. Identify files
+        files_map = self._identify_files(folder)
+
+        # 2. Run separated checks
+        inputs_res = self.check_inputs(files_map)
+        outputs_res = self.check_outputs(files_map)
+        gt_res = self.calculate_ground_truth(files_map)
+
+        return {
+            "Folder": folder.name, 
+            "booleans": {**inputs_res, **outputs_res}, 
+            "ground_truth": gt_res
+        }
 
     def extract_agent_data(self, report_path: Optional[Path]) -> Dict[str, Any]:
-        """
-        Extracts Fukui results from the report.
-
-        Args:
-            report_path (Optional[Path]): The path to the report.
-
-        Returns:
-            Dict[str, Any]: Extracted data.
-        """
         if not report_path: return {}
         return extract_fukui_from_md(str(report_path))
 
     def score_all(self, folder_results: List[Dict[str, Any]], agent_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Scores the Fukui job.
-
-        Args:
-            folder_results (List[Dict]): Results (expected length 1).
-            agent_data (Dict): Extracted agent data.
-
-        Returns:
-            Dict[str, Any]: The score.
-        """
         if not folder_results:
             return {"error": "No results processed"}
         
@@ -157,3 +146,15 @@ class FukuiJob(BenchmarkJob):
             rubric=self.rubric
         )
         return score
+
+    def run(self) -> Dict[str, Any]:
+        folders = self.scan_folders()
+        
+        folder_results = []
+        for folder in folders:
+            folder_results.append(self.process_folder(folder))
+            
+        report_path = self.find_report()
+        agent_data = self.extract_agent_data(report_path)
+        
+        return self.score_all(folder_results, agent_data)
